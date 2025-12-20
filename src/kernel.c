@@ -76,6 +76,35 @@ static int __init my_module_init(void)
     my_kfree(e);
     my_kfree(f);
 
+    /* --- DEMO: Worst Fit --- */
+    printk(KERN_INFO "MyMemory: \n--- Switching to Worst Fit ---\n");
+    set_allocation_algorithm(ALGO_WORST_FIT);
+
+    /* Create fragmentation:
+       Alloc: [100][500][100][200][100]
+       Free:       [500]     [200]
+    */
+    void *w1 = my_kmalloc(100);
+    void *w2 = my_kmalloc(500);
+    void *w3 = my_kmalloc(100);
+    void *w4 = my_kmalloc(200);
+    void *w5 = my_kmalloc(100);
+
+    my_kfree(w2); /* Free 500 */
+    my_kfree(w4); /* Free 200 */
+
+    printk(KERN_INFO "MyMemory: Holes available: ~500 and ~200. Allocating 150.\n");
+    /* Best Fit would take 200. Worst Fit should take 500. */
+
+    void *w6 = my_kmalloc(150);
+    print_heap_stats();
+
+    /* Clean up */
+    my_kfree(w1);
+    my_kfree(w3);
+    my_kfree(w5);
+    my_kfree(w6);
+
     printk(KERN_INFO "MyMemory: Demo Complete.\n");
 
     return 0;

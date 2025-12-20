@@ -1,7 +1,12 @@
 #ifndef MEMORY_H
 #define MEMORY_H
 
+#ifdef UNIT_TESTING
+#include <stddef.h>
+#include <stdint.h>
+#else
 #include <linux/types.h>
+#endif
 
 /* Allocation algorithms */
 typedef enum

@@ -1,6 +1,11 @@
+#ifdef UNIT_TESTING
+#include <stdio.h>
+#include <stdint.h>
+#else
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#endif
 #include "memory.h"
 
 /* Memory block header structure */
@@ -103,6 +108,9 @@ static void coalesce(block_header_t *block)
 
 void *my_kmalloc(size_t size)
 {
+    /* DEBUG: Prove we are using custom allocator */
+    printk(KERN_INFO "MyMemory: my_kmalloc called for %zu bytes\n", size);
+
     if (size == 0)
         return NULL;
 
