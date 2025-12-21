@@ -15,23 +15,33 @@
 #define BENCH_FREES 500
 #define BENCH_SECOND_ALLOCS 500
 
-void *ptrs[BENCH_INITIAL_ALLOCS]; 
+void *ptrs[BENCH_INITIAL_ALLOCS];
 
-void run_test(alloc_algo_t algo, const char *name) {
+void run_test(alloc_algo_t algo, const char *name)
+{
     printf("========================================\n");
     printf("TESTING ALGORITHM (Visual): %s\n", name);
     printf("========================================\n");
-    
+
     my_memory_reset();
     srand(SEED);
 
-    for (int i = 0; i < NUM_INITIAL_ALLOCS; i++) ptrs[i] = NULL;
+    int step = 0;
+    dump_heap_state("heap_history.jsonl", step++, "INIT", NULL, name);
+
+    for (int i = 0; i < NUM_INITIAL_ALLOCS; i++)
+        ptrs[i] = NULL;
 
     printf("Step 1: Allocating %d blocks...\n", NUM_INITIAL_ALLOCS);
-    for (int i = 0; i < NUM_INITIAL_ALLOCS; i++) {
+    for (int i = 0; i < NUM_INITIAL_ALLOCS; i++)
+    {
         size_t size = rand() % (MAX_SIZE - MIN_SIZE + 1) + MIN_SIZE;
         printf("Allocating [%d]: Size %zu\n", i, size);
         ptrs[i] = my_malloc(size, algo);
+
+        char op[64];
+        sprintf(op, "ALLOC %zu", size);
+        dump_heap_state("heap_history.jsonl", step++, op, ptrs[i], name);
     }
 
     print_heap_stats(NULL);
@@ -39,27 +49,42 @@ void run_test(alloc_algo_t algo, const char *name) {
 
     printf("Step 2: Freeing %d blocks...\n", NUM_FREES);
     int freed_count = 0;
-    while (freed_count < NUM_FREES) {
+    while (freed_count < NUM_FREES)
+    {
         int idx = rand() % NUM_INITIAL_ALLOCS;
-        if (ptrs[idx] != NULL) {
+        if (ptrs[idx] != NULL)
+        {
             printf("Freeing slot [%d]\n", idx);
+            void *ptr_to_free = ptrs[idx];
             my_free(ptrs[idx]);
+
+            char op[64];
+            sprintf(op, "FREE", ptr_to_free);
+            dump_heap_state("heap_history.jsonl", step++, op, ptr_to_free, name);
+
             ptrs[idx] = NULL;
             freed_count++;
         }
     }
-    
+
     print_heap_stats(NULL);
     print_block_count();
 
     printf("Step 3: Allocating %d new blocks...\n", NUM_SECOND_ALLOCS);
     int alloc_count = 0;
-    for (int i = 0; i < NUM_INITIAL_ALLOCS && alloc_count < NUM_SECOND_ALLOCS; i++) {
-        if (ptrs[i] == NULL) {
+    for (int i = 0; i < NUM_INITIAL_ALLOCS && alloc_count < NUM_SECOND_ALLOCS; i++)
+    {
+        if (ptrs[i] == NULL)
+        {
             size_t size = rand() % (MAX_SIZE - MIN_SIZE + 1) + MIN_SIZE;
             printf("----------------------------------------\n");
             printf("Re-allocating slot [%d]: Size %zu\n", i, size);
             ptrs[i] = my_malloc(size, algo);
+
+            char op[64];
+            sprintf(op, "ALLOC %zu", size);
+            dump_heap_state("heap_history.jsonl", step++, op, ptrs[i], name);
+
             print_heap_stats(ptrs[i]);
             print_block_count();
             print_total_size();
@@ -67,38 +92,67 @@ void run_test(alloc_algo_t algo, const char *name) {
             alloc_count++;
         }
     }
-    
+
+    print_heap_stats(NULL);
+    print_block_count();
+
+    printf("Step 4: Calloc Test (Allocating 2 blocks cleared to zero)...\n");
+    // Find 2 empty slots
+    int calloc_count = 0;
+    for (int i = 0; i < NUM_INITIAL_ALLOCS && calloc_count < 2; i++)
+    {
+        if (ptrs[i] == NULL)
+        {
+            size_t num = 4;
+            size_t size = 32; // 4 * 32 = 128 bytes
+            printf("Calloc slot [%d]: %zu elements of %zu bytes\n", i, num, size);
+            ptrs[i] = my_calloc(num, size, algo);
+
+            char op[64];
+            sprintf(op, "CALLOC %zu*%zu", num, size);
+            dump_heap_state("heap_history.jsonl", step++, op, ptrs[i], name);
+
+            calloc_count++;
+        }
+    }
+
     print_heap_stats(NULL);
     print_block_count();
     print_total_size();
     printf("Visual Test %s Completed.\n\n", name);
 }
 
-typedef struct {
+typedef struct
+{
     const char *name;
     double time;
     int total_blocks;
 } BenchmarkResult;
 
-BenchmarkResult run_benchmark(alloc_algo_t algo, const char *name) {
+BenchmarkResult run_benchmark(alloc_algo_t algo, const char *name)
+{
     printf("========================================\n");
     printf("BENCHMARK ALGORITHM: %s\n", name);
     printf("========================================\n");
-    
+
     my_memory_reset();
     srand(12345);
 
-    for (int i = 0; i < BENCH_INITIAL_ALLOCS; i++) ptrs[i] = NULL;
+    for (int i = 0; i < BENCH_INITIAL_ALLOCS; i++)
+        ptrs[i] = NULL;
 
-    for (int i = 0; i < BENCH_INITIAL_ALLOCS; i++) {
+    for (int i = 0; i < BENCH_INITIAL_ALLOCS; i++)
+    {
         size_t size = rand() % (MAX_SIZE - MIN_SIZE + 1) + MIN_SIZE;
         ptrs[i] = my_malloc(size, algo);
     }
 
     int freed_count = 0;
-    while (freed_count < BENCH_FREES) {
+    while (freed_count < BENCH_FREES)
+    {
         int idx = rand() % BENCH_INITIAL_ALLOCS;
-        if (ptrs[idx] != NULL) {
+        if (ptrs[idx] != NULL)
+        {
             my_free(ptrs[idx]);
             ptrs[idx] = NULL;
             freed_count++;
@@ -108,8 +162,10 @@ BenchmarkResult run_benchmark(alloc_algo_t algo, const char *name) {
     clock_t start_time = clock();
 
     int alloc_count = 0;
-    for (int i = 0; i < BENCH_INITIAL_ALLOCS && alloc_count < BENCH_SECOND_ALLOCS; i++) {
-        if (ptrs[i] == NULL) {
+    for (int i = 0; i < BENCH_INITIAL_ALLOCS && alloc_count < BENCH_SECOND_ALLOCS; i++)
+    {
+        if (ptrs[i] == NULL)
+        {
             size_t size = rand() % (MAX_SIZE - MIN_SIZE + 1) + MIN_SIZE;
             ptrs[i] = my_malloc(size, algo);
             alloc_count++;
@@ -134,32 +190,42 @@ BenchmarkResult run_benchmark(alloc_algo_t algo, const char *name) {
     return result;
 }
 
-void save_results_to_json(const char *filename, BenchmarkResult *results, int count) {
+void save_results_to_json(const char *filename, BenchmarkResult *results, int count)
+{
     FILE *fp = fopen(filename, "w");
-    if (fp) {
+    if (fp)
+    {
         fprintf(fp, "[\n");
-        for (int i = 0; i < count; i++) {
-            fprintf(fp, "  {\"name\": \"%s\", \"time\": %f, \"total_blocks\": %d}%s\n", 
+        for (int i = 0; i < count; i++)
+        {
+            fprintf(fp, "  {\"name\": \"%s\", \"time\": %f, \"total_blocks\": %d}%s\n",
                     results[i].name, results[i].time, results[i].total_blocks, (i < count - 1) ? "," : "");
         }
         fprintf(fp, "]\n");
         fclose(fp);
         printf("Benchmark results written to %s\n", filename);
-    } else {
+    }
+    else
+    {
         printf("Error writing to %s\n", filename);
     }
 }
 
-int main() {
+int main()
+{
+    FILE *f = fopen("heap_history.jsonl", "w");
+    if (f)
+        fclose(f);
+
     run_test(ALGO_FIRST_FIT, "FIRST_FIT");
     run_test(ALGO_BEST_FIT, "BEST_FIT");
     run_test(ALGO_WORST_FIT, "WORST_FIT");
-    
+
     BenchmarkResult results[3];
     results[0] = run_benchmark(ALGO_FIRST_FIT, "FIRST_FIT");
     results[1] = run_benchmark(ALGO_BEST_FIT, "BEST_FIT");
     results[2] = run_benchmark(ALGO_WORST_FIT, "WORST_FIT");
-    
+
     save_results_to_json("results.json", results, 3);
 
     return 0;

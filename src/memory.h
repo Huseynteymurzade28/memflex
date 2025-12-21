@@ -39,5 +39,6 @@ void print_heap_stats(void *highlight_ptr);
 void print_block_count(void);
 int get_total_block_count(void);
 void print_total_size(void);
+void dump_heap_state(const char *filepath, int step, const char *op, void *highlight_ptr, const char *algo_name);
 
 #endif
