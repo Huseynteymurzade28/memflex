@@ -1,5 +1,5 @@
 [
-  {"name": "First Fit", "time": 0.015919, "free_blocks": 469},
-  {"name": "Best Fit", "time": 0.031427, "free_blocks": 223},
-  {"name": "Worst Fit", "time": 0.041473, "free_blocks": 776}
+  {"name": "FIRST_FIT", "time": 0.001859, "total_blocks": 1087},
+  {"name": "BEST_FIT", "time": 0.002937, "total_blocks": 1032},
+  {"name": "WORST_FIT", "time": 0.005480, "total_blocks": 1233}
 ]

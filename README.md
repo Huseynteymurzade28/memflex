@@ -1,125 +1,89 @@
-# Dynamic Memory Manager (Kernel Module)
+# Dynamic Memory Manager (User Space)
 
-This project implements a custom Dynamic Memory Manager as a Linux Kernel Module. It provides functionality similar to standard C library functions (`malloc`, `free`, `calloc`) but operates directly within the kernel space.
+This project implements a custom Dynamic Memory Manager in user space using `sbrk`. It provides functionality similar to standard C library functions (`malloc`, `free`, `calloc`) and includes a benchmarking suite to compare different allocation algorithms.
 
-The project demonstrates fundamental operating system concepts such as memory allocation strategies and fragmentation management.
+The project demonstrates fundamental operating system concepts such as memory allocation strategies, fragmentation management, and performance benchmarking.
 
 ## Features
 
-- **Custom Memory Allocation:** Implements `my_kmalloc`, `my_kfree`, and `my_kcalloc`.
+- **Custom Memory Allocation:** Implements `my_malloc`, `my_free`, and `my_calloc`.
 - **Allocation Algorithms:**
   - **First-Fit:** Allocates the first free block that fits the requested size.
   - **Best-Fit:** Allocates the smallest free block that fits the requested size (minimizes wasted space).
   - **Worst-Fit:** Allocates the largest free block (leaves large holes).
 - **Fragmentation Management:** Implements **Coalescing** to merge adjacent free blocks and reduce external fragmentation.
 - **Doubly Linked List:** Uses a doubly linked list structure to manage memory blocks efficiently.
+- **JSON Output:** Benchmark results are saved to `results.json` for further analysis.
+- **Visualization:** A Rust-based terminal visualization tool is included to view benchmark results.
 
 ## Project Structure
 
 ```
-DDM/
-├── Makefile            # Build script for kernel module and tests
+memflex/
+├── Makefile            # Build script
 ├── src/
-│   ├── kernel.c        # Kernel module entry point
-│   ├── memory.c        # Memory manager implementation
-│   └── memory.h        # Header file
-├── tests/
-│   ├── test_memory.c      # Unit tests
-│   └── benchmark_memory.c # Performance benchmark
-├── viz/                # Rust-based visualization tool
+│   ├── main.c          # Benchmark runner and tests
+│   ├── memory.c        # Implementation of the memory manager
+│   └── memory.h        # Header file with function prototypes and structs
+├── viz/                # Rust visualization tool
+├── results.json        # Output file from benchmarks
 └── README.md           # This file
 ```
 
 ## Prerequisites
 
-- Linux Operating System
-- GCC Compiler & Make
-- Linux Kernel Headers
-- **Rust & Cargo** (for visualization only)
+- __C Project__:
+  - GCC Compiler
+  - Make tool
+- __Visualization__:
+  - Rust (Cargo)
 
 ## How to Build and Run
 
-1.  **Open a terminal** in the project directory.
+### 1. Build and Run Allocator Benchmarks
 
-2.  **Clean previous builds:**
+**Open a terminal** in the project directory.
 
-    ```bash
-    make clean
-    ```
-
-3.  **Compile and Run Kernel Module:**
-    This compiles the module, inserts it, shows logs, and removes it.
-
-    ```bash
-    make run
-    ```
-
-## Testing & Benchmarking
-
-### Unit Tests
-
-To verify the correctness of the algorithms (First-Fit, Best-Fit, Coalescing):
+**Compile and Run:**
 
 ```bash
-make test
+make run-main
 ```
 
-### Performance Benchmark
+This command compiles the project, runs the benchmarks, prints statistics to the console, and generates `results.json`.
 
-To compare the performance of different algorithms:
+### 2. Run Visualization
+
+After generating `results.json`, you can visualize the results using the Rust tool.
+
+**Navigate to the viz directory:**
 
 ```bash
-make benchmark
+cd viz
 ```
 
-### Visualization
-
-To run the benchmark and visualize the results with graphs (requires Rust):
+**Run the visualization:**
 
 ```bash
-make visualize
+cargo run
 ```
 
-    ```
+This will launch a terminal-based UI showing:
+- **Execution Time**: Comparison of execution speed for different algorithms.
+- **Total Block Count**: Comparison of fragmentation (managed as total memory blocks).
 
-    _Note: You may be asked for your `sudo` password because inserting kernel modules requires root privileges._
+_Press 'q' to exit the visualization._
 
 ## Understanding the Output
 
-The `make run` command will display the kernel log (dmesg). You will see output similar to this:
-
-```text
-[  262.855422] MyMemory: --- Heap Stats ---
-[  262.855423] MyMemory: Block at: 000000008ae1501e Size: 104 [USED]
-[  262.855423] MyMemory: Block at: 000000001ab6286b Size: 504 [FREE]
-...
-[  262.855429] MyMemory: Holes available: ~2000 and ~500. Allocating 400.
-[  262.855430] MyMemory: Block at: 0000000092f3af78 Size: 400 [USED]
-```
-
-- **[USED]:** Indicates an allocated memory block.
-- **[FREE]:** Indicates a free memory block available for allocation.
-- **Size:** The size of the data area in the block (excluding the header).
+The `results.json` file contains:
+- `name`: Algorithm name (e.g., FIRST_FIT).
+- `time`: Execution time in seconds.
+- `total_blocks`: Total number of memory blocks (used + free) remaining after operations, serving as a metric for fragmentation.
 
 ## Configuration
 
-You can modify the test scenarios in `src/kernel.c`.
-
-To change the allocation algorithm programmatically:
-
-```c
-set_allocation_algorithm(ALGO_FIRST_FIT);
-// or
-set_allocation_algorithm(ALGO_BEST_FIT);
-// or
-set_allocation_algorithm(ALGO_WORST_FIT);
-```
-
-## Technical Details
-
-- **Block Header:** Each memory block is preceded by a header containing its size, status (free/used), and pointers to the next/previous blocks.
-- **Alignment:** All allocations are aligned to 8 bytes to ensure performance and compatibility.
-- **Coalescing:** When `my_kfree` is called, the manager checks the previous and next blocks. If they are free, they are merged into a single larger block.
+You can modify test parameters in `src/main.c` (e.g., `BENCH_INITIAL_ALLOCS`, `BENCH_FREES`).
 
 ## License
 

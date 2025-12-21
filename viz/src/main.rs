@@ -14,7 +14,7 @@ use std::{error::Error, fs, io::stdout};
 struct BenchmarkResult {
     name: String,
     time: f64,
-    free_blocks: u64,
+    total_blocks: u64,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -54,11 +54,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             // Fragmentation Chart
             let frag_data: Vec<(&str, u64)> = results
                 .iter()
-                .map(|r| (r.name.as_str(), r.free_blocks))
+                .map(|r| (r.name.as_str(), r.total_blocks))
                 .collect();
 
             let frag_chart = BarChart::default()
-                .block(Block::default().title("Fragmentation (Free Blocks Count)").borders(Borders::ALL))
+                .block(Block::default().title("Total Block Count").borders(Borders::ALL))
                 .data(&frag_data)
                 .bar_width(10)
                 .bar_gap(5)

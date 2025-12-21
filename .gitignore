@@ -1,6 +1,11 @@
-# C Kernel Module artifacts
+# Object files
 *.o
+*.so
 *.ko
+*.obj
+*.elf
+
+# Kernel module build artifacts
 *.mod.c
 *.mod
 modules.order
@@ -8,13 +13,18 @@ Module.symvers
 .*.cmd
 .tmp_versions/
 
-# Test Executables
+# Test executables
 tests/test_memory
-tests/benchmark_memory
 
-# Benchmark Data
+# Editor temporary files
+*~
+*.swp
+
+# Binaries
+main
+
+# Output
 results.json
 
-# Rust / Cargo
+# Rust
 viz/target/
-viz/Cargo.lock

@@ -1,77 +1,81 @@
-#ifdef UNIT_TESTING
-#include <stdio.h>
-#include <stdint.h>
-#else
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/types.h>
-#endif
+#define _GNU_SOURCE
 #include "memory.h"
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
 
-/* Memory block header structure */
-typedef struct block_header
-{
-    size_t size;               /* Size of the data part */
-    int is_free;               /* 1 if free, 0 if allocated */
-    struct block_header *next; /* Pointer to the next block in the list */
-    struct block_header *prev; /* Pointer to the previous block */
-} block_header_t;
+static void *heap_start_addr = NULL;
+static size_t heap_total_size = 0;
 
-/* Global variables */
-static void *heap_start = NULL;
-static block_header_t *head = NULL;
-static alloc_algo_t current_algo = ALGO_FIRST_FIT;
+#define BLOCK_HEADER_SIZE sizeof(block_header_t)
+#define DEFAULT_HEAP_SIZE (640) //640 Byte For Visual Test
+//#define DEFAULT_HEAP_SIZE (65536) //64KB For Benchmark
 
-/* Helper: Align size to 8 bytes */
-static size_t align(size_t n)
-{
-    return (n + 7) & ~7;
+void heap_init(void *start_addr, size_t size) {
+    if (!start_addr || size < BLOCK_HEADER_SIZE) {
+        return;
+    }
+
+    heap_start_addr = start_addr;
+    heap_total_size = size;
+
+    block_header_t *first_block = (block_header_t *)start_addr;
+    first_block->size = size - BLOCK_HEADER_SIZE;
+    first_block->is_free = 1;
+    first_block->next = NULL;
+    first_block->prev = NULL;
 }
 
-void heap_init(void *start_addr, size_t size)
-{
-    heap_start = start_addr;
-
-    /* Initialize the first block covering the entire heap */
-    head = (block_header_t *)start_addr;
-    head->size = size - sizeof(block_header_t);
-    head->is_free = 1;
-    head->next = NULL;
-    head->prev = NULL;
-
-    printk(KERN_INFO "MyMemory: Heap initialized at: %p Size: %zu\n", start_addr, size);
+int my_memory_init(size_t size) {
+    void *mem = sbrk(size);
+    if (mem == (void *)-1) {
+        return -1;
+    }
+    
+    heap_init(mem, size);
+    return 0;
 }
 
-void set_allocation_algorithm(alloc_algo_t algo)
-{
-    current_algo = algo;
-    printk(KERN_INFO "MyMemory: Allocation algorithm set to: ");
-    if (algo == ALGO_FIRST_FIT)
-        printk(KERN_CONT "First Fit\n");
-    else if (algo == ALGO_BEST_FIT)
-        printk(KERN_CONT "Best Fit\n");
-    else if (algo == ALGO_WORST_FIT)
-        printk(KERN_CONT "Worst Fit\n");
+void my_memory_reset(void) {
+    heap_start_addr = NULL;
+    heap_total_size = 0;
 }
 
-/* Split a block if it's large enough to hold the requested size + a new header + some data */
-static void split_block(block_header_t *block, size_t size)
-{
-    /* Minimum size for a new block: header + 8 bytes */
-    size_t min_block_size = sizeof(block_header_t) + 8;
+static block_header_t *find_free_block(size_t size, alloc_algo_t algo) {
+    block_header_t *current = (block_header_t *)heap_start_addr;
+    block_header_t *best_block = NULL;
 
-    if (block->size >= size + min_block_size)
-    {
-        /* Calculate address of the new block */
-        block_header_t *new_block = (block_header_t *)((uint8_t *)block + sizeof(block_header_t) + size);
+    while (current != NULL) {
+        if (current->is_free && current->size >= size) {
+            if (algo == ALGO_FIRST_FIT) {
+                return current;
+            } 
+            else if (algo == ALGO_BEST_FIT) {
+                if (best_block == NULL || current->size < best_block->size) {
+                    best_block = current;
+                }
+            } 
+            else if (algo == ALGO_WORST_FIT) {
+                if (best_block == NULL || current->size > best_block->size) {
+                    best_block = current;
+                }
+            }
+        }
+        current = current->next;
+    }
+    return best_block;
+}
 
-        new_block->size = block->size - size - sizeof(block_header_t);
+static void split_block(block_header_t *block, size_t size) {
+    if (block->size > size + BLOCK_HEADER_SIZE) {
+        block_header_t *new_block = (block_header_t *)((char *)block + BLOCK_HEADER_SIZE + size);
+        
+        new_block->size = block->size - size - BLOCK_HEADER_SIZE;
         new_block->is_free = 1;
         new_block->next = block->next;
         new_block->prev = block;
 
-        if (block->next)
-        {
+        if (block->next != NULL) {
             block->next->prev = new_block;
         }
 
@@ -80,119 +84,159 @@ static void split_block(block_header_t *block, size_t size)
     }
 }
 
-/* Coalesce free blocks */
-static void coalesce(block_header_t *block)
-{
-    /* Try to merge with next */
-    if (block->next && block->next->is_free)
-    {
-        block->size += sizeof(block_header_t) + block->next->size;
+static void coalesce(block_header_t *block) {
+    if (block->next && block->next->is_free) {
+        block->size += BLOCK_HEADER_SIZE + block->next->size;
         block->next = block->next->next;
-        if (block->next)
-        {
+        if (block->next) {
             block->next->prev = block;
         }
     }
 
-    /* Try to merge with prev */
-    if (block->prev && block->prev->is_free)
-    {
-        block->prev->size += sizeof(block_header_t) + block->size;
+    if (block->prev && block->prev->is_free) {
+        block->prev->size += BLOCK_HEADER_SIZE + block->size;
         block->prev->next = block->next;
-        if (block->next)
-        {
+        if (block->next) {
             block->next->prev = block->prev;
         }
     }
 }
 
-void *my_kmalloc(size_t size)
-{
-    /* DEBUG: Prove we are using custom allocator */
-    printk(KERN_INFO "MyMemory: my_kmalloc called for %zu bytes\n", size);
+static block_header_t *extend_heap(size_t size) {
+    size = (size + 7) & ~7;
+    
+    size_t num_units = (size + DEFAULT_HEAP_SIZE - 1) / DEFAULT_HEAP_SIZE;
+    size_t alloc_size = num_units * DEFAULT_HEAP_SIZE;
 
-    if (size == 0)
+    void *p = sbrk(alloc_size);
+    if (p == (void *)-1) {
         return NULL;
+    }
 
-    size = align(size);
-    block_header_t *curr_block = head;
-    block_header_t *best_block = NULL;
+    heap_total_size += alloc_size;
 
-    while (curr_block)
-    {
-        if (curr_block->is_free && curr_block->size >= size)
-        {
-            if (current_algo == ALGO_FIRST_FIT)
-            {
-                best_block = curr_block;
-                break;
-            }
-            else if (current_algo == ALGO_BEST_FIT)
-            {
-                if (!best_block || curr_block->size < best_block->size)
-                {
-                    best_block = curr_block;
-                }
-            }
-            else if (current_algo == ALGO_WORST_FIT)
-            {
-                if (!best_block || curr_block->size > best_block->size)
-                {
-                    best_block = curr_block;
-                }
-            }
+    block_header_t *new_block = (block_header_t *)p;
+    new_block->size = alloc_size - BLOCK_HEADER_SIZE;
+    new_block->is_free = 1;
+    new_block->next = NULL;
+    new_block->prev = NULL;
+
+    block_header_t *current = (block_header_t *)heap_start_addr;
+    if (current) {
+        while (current->next != NULL) {
+            current = current->next;
         }
-        curr_block = curr_block->next;
+        current->next = new_block;
+        new_block->prev = current;
+    } else {
+        heap_start_addr = new_block;
     }
 
-    if (best_block)
-    {
-        split_block(best_block, size);
-        best_block->is_free = 0;
-        return (void *)((uint8_t *)best_block + sizeof(block_header_t));
-    }
+    coalesce(new_block);
 
-    return NULL; /* Out of memory */
+    return new_block;
 }
 
-void my_kfree(void *ptr)
-{
-    if (!ptr)
-        return;
+void *my_malloc(size_t size, alloc_algo_t algo) {
+    if (size == 0) return NULL;
+    
+    if (heap_start_addr == NULL) {
+        if (my_memory_init(DEFAULT_HEAP_SIZE) != 0) {
+            return NULL;
+        }
+    }
 
-    /* Get header */
-    block_header_t *block = (block_header_t *)((uint8_t *)ptr - sizeof(block_header_t));
+    size = (size + 7) & ~7;
+
+    block_header_t *block = find_free_block(size, algo);
+
+    if (block == NULL) {
+        size_t needed = size + BLOCK_HEADER_SIZE;
+        block = extend_heap(needed);
+        
+        if (block == NULL) {
+            return NULL;
+        }
+        
+        block = find_free_block(size, algo);
+    }
+
+    if (block) {
+        split_block(block, size);
+        block->is_free = 0;
+        return (void *)((char *)block + BLOCK_HEADER_SIZE);
+    }
+
+    return NULL;
+}
+
+void my_free(void *ptr) {
+    if (!ptr) return;
+
+    block_header_t *block = (block_header_t *)((char *)ptr - BLOCK_HEADER_SIZE);
     block->is_free = 1;
-
-    /* Merge with neighbors to reduce fragmentation */
+    
     coalesce(block);
 }
 
-void *my_kcalloc(size_t num, size_t size)
-{
-    size_t total = num * size;
-    void *ptr = my_kmalloc(total);
-    if (ptr)
-    {
-        /* Zero out memory */
-        uint8_t *p = (uint8_t *)ptr;
-        for (size_t i = 0; i < total; i++)
-        {
-            p[i] = 0;
-        }
+void *my_calloc(size_t num, size_t size, alloc_algo_t algo) {
+    size_t total_size = num * size;
+    void *ptr = my_malloc(total_size, algo);
+    if (ptr) {
+        memset(ptr, 0, total_size);
     }
     return ptr;
 }
 
-void print_heap_stats(void)
-{
-    block_header_t *curr_block = head;
-    printk(KERN_INFO "MyMemory: --- Heap Stats ---\n");
-    while (curr_block)
-    {
-        printk(KERN_INFO "MyMemory: Block at: %p Size: %zu %s\n",
-               curr_block, curr_block->size, curr_block->is_free ? "[FREE]" : "[USED]");
-        curr_block = curr_block->next;
+void print_heap_stats(void *highlight_ptr) {
+    printf("--- Heap Stats ---\n");
+    block_header_t *current = (block_header_t *)heap_start_addr;
+    int i = 0;
+    while (current != NULL) {
+        void *data_ptr = (void *)((char *)current + BLOCK_HEADER_SIZE);
+        int highlight = (highlight_ptr != NULL && data_ptr == highlight_ptr);
+        
+        if (highlight) printf("----------------------------------------\n");
+        printf("Block %d: [%s] Size: %zu bytes (Addr: %p)\n", 
+               i++, 
+               current->is_free ? "FREE" : "USED", 
+               current->size, 
+               current);
+        if (highlight) printf("----------------------------------------\n");
+               
+        current = current->next;
     }
-    printk(KERN_INFO "MyMemory: ------------------\n");
+    printf("Total Blocks: %d\n", i);
+    printf("------------------\n");
+}
+
+void print_block_count(void) {
+    printf("Total Blocks: %d\n", get_total_block_count());
+}
+
+int get_total_block_count(void) {
+    block_header_t *current = (block_header_t *)heap_start_addr;
+    int count = 0;
+    while (current != NULL) {
+        count++;
+        current = current->next;
+    }
+    return count;
+}
+
+void print_total_size(void) {
+    block_header_t *current = (block_header_t *)heap_start_addr;
+    size_t total_size = 0;
+    while (current != NULL) {
+        total_size += current->size;
+        current = current->next;
+    }
+    
+    if (total_size < 1024) {
+        printf("Total Size: %zu Bytes\n", total_size);
+    } else if (total_size < 1024 * 1024) {
+        printf("Total Size: %.2f KB\n", (double)total_size / 1024.0);
+    } else {
+        printf("Total Size: %.2f MB\n", (double)total_size / (1024.0 * 1024.0));
+    }
 }
