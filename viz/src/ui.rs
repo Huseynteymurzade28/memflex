@@ -1,7 +1,7 @@
 use crate::app::App;
 use ratatui::{
     prelude::*,
-    widgets::{BarChart, Block, Borders, Paragraph},
+    widgets::{BarChart, Block, Borders, Cell, Paragraph, Row, Table},
 };
 
 // Tokyo Night Colors
@@ -291,8 +291,18 @@ fn render_current_stats(frame: &mut Frame, app: &App, area: Rect) {
 fn render_global_stats(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Length(6), // Table
+            Constraint::Min(1),    // Charts
+        ])
         .split(area);
+
+    render_benchmark_table(frame, app, chunks[0]);
+
+    let chart_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(chunks[1]);
 
     // Time Chart
     let time_data: Vec<(&str, u64)> = app
@@ -304,7 +314,7 @@ fn render_global_stats(frame: &mut Frame, app: &App, area: Rect) {
     let time_chart = BarChart::default()
         .block(
             Block::default()
-                .title(" Execution Time (ms) ")
+                .title(" Step 3 Time (ms) ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(TOKYO_GREEN)),
         )
@@ -314,7 +324,7 @@ fn render_global_stats(frame: &mut Frame, app: &App, area: Rect) {
         .value_style(Style::default().fg(TOKYO_BG).bg(TOKYO_GREEN))
         .style(Style::default().fg(TOKYO_GREEN).bg(TOKYO_BG));
 
-    frame.render_widget(time_chart, chunks[0]);
+    frame.render_widget(time_chart, chart_chunks[0]);
 
     // Fragmentation Chart (Total Blocks)
     let frag_data: Vec<(&str, u64)> = app
@@ -336,5 +346,42 @@ fn render_global_stats(frame: &mut Frame, app: &App, area: Rect) {
         .value_style(Style::default().fg(TOKYO_BG).bg(TOKYO_MAGENTA))
         .style(Style::default().fg(TOKYO_MAGENTA).bg(TOKYO_BG));
 
-    frame.render_widget(frag_chart, chunks[1]);
+    frame.render_widget(frag_chart, chart_chunks[1]);
+}
+
+fn render_benchmark_table(frame: &mut Frame, app: &App, area: Rect) {
+    let header_cells = ["Algo", "Step 3 Time (s)", "Blocks"]
+        .iter()
+        .map(|h| Cell::from(*h).style(Style::default().fg(TOKYO_BG).bg(TOKYO_BLUE)));
+    let header = Row::new(header_cells)
+        .style(Style::default().bg(TOKYO_BLUE))
+        .height(1);
+
+    let rows = app.benchmark_results.iter().map(|item| {
+        let cells = vec![
+            Cell::from(item.name.clone()),
+            Cell::from(format!("{:.6}", item.time)),
+            Cell::from(item.total_blocks.to_string()),
+        ];
+        Row::new(cells)
+            .height(1)
+            .style(Style::default().fg(TOKYO_FG))
+    });
+
+    let t = Table::new(
+        rows,
+        [
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Detailed Stats "),
+    );
+
+    frame.render_widget(t, area);
 }
